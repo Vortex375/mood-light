@@ -6,133 +6,133 @@
   #include <avr/power.h>
 #endif
 
-#define PIN            6
-#define NUMPIXELS      24
+#define SERIAL_BAUD_RATE 19200
 
-#define MAX_INTENSITY 10            
+#define PIN           6
+#define NUMPIXELS     24
+
+#define BLACK         pixels.Color(0, 0, 0)
+#define WHITE         pixels.Color(255, 255, 255)
+#define WHITE_3000K   pixels.Color(255, 180, 107)
+#define WHITE_6500K   pixels.Color(255, 249, 253)
+
+#define DELAYVAL      250
+#define DELAYFADE     5
+
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB | NEO_KHZ800);
 
-int delayval   = 20;
-byte current[] = {0, 0, 0};
-byte target[]  = {0, 0, 0};
+// for direct pixel access in NEO_GRB mode
+typedef struct {uint8_t g; uint8_t r; uint8_t b;} pixel_t;
 
-byte clamp(byte b) {
-  if (b > MAX_INTENSITY) {
-    return MAX_INTENSITY;
-  }
-  return b;
+pixel_t colorBuffer[NUMPIXELS];
+
+void patternSingle(uint32_t color) {
+  uint8_t *c = (uint8_t*) &color;
+  colorBuffer[0].r = c[2];
+  colorBuffer[0].g = c[1];
+  colorBuffer[0].b = c[0];
+  memcpy(colorBuffer+1, colorBuffer, sizeof(colorBuffer) - sizeof(pixel_t));
 }
 
-void setAll() {
-  for (int i=0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(clamp(current[0]), clamp(current[1]), clamp(current[2])));
-    pixels.show();
-  }
-}
-
-void spinner(int repeat) {
-  int offset;
-  
-  for (int i=0; i < NUMPIXELS; i++) {
-    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
-    pixels.show();
-  }
-  for (int r = 0; r < repeat; r++) {
-    offset = 0;
-    while (offset < NUMPIXELS) {
-      pixels.setPixelColor((offset - 1 + NUMPIXELS) % NUMPIXELS, pixels.Color(0, 0, 0));
-      pixels.setPixelColor((offset - 1 + NUMPIXELS + NUMPIXELS / 2) % NUMPIXELS, pixels.Color(0, 0, 0));
-      for (int i=offset; i < offset + NUMPIXELS / 4; i++) {
-        pixels.setPixelColor(i % NUMPIXELS, pixels.Color(clamp(current[0]), clamp(current[1]), clamp(current[2])));
-        pixels.setPixelColor((i + NUMPIXELS / 2) % NUMPIXELS, pixels.Color(clamp(current[0]), clamp(current[1]), clamp(current[2])));
-        pixels.show();
-      }
-      delay(delayval * 5);
-      offset++;
-    }
-  }
+void applyInstant() {
+  memcpy(pixels.getPixels(), colorBuffer, sizeof(colorBuffer));
+  pixels.show();
 }
 
 void fadeTo() {
+  uint8_t *current;
+  uint8_t *target;
   boolean done;
   while (true) {
     done = true;
-    for (int i=0; i < 3; i++) {
-      if (current[i] < target[i]) {
-        current[i]++;
-        done = false;
-      } else if (current[i] > target[i]) {
-        current[i]--;
-        done = false;
+    current = pixels.getPixels();
+    target = (uint8_t*) colorBuffer;
+    
+    for (int j = 0; j < NUMPIXELS; j++) {
+      for (int i=0; i < sizeof(pixel_t); i++) {
+        if (current[i] < target[i]) {
+          current[i]++;
+          done = false;
+        } else if (current[i] > target[i]) {
+          current[i]--;
+          done = false;
+        }
       }
+      current += sizeof(pixel_t);
+      target += sizeof(pixel_t);
     }
     if (done) {
       return;
     }
-    setAll();
-    delay(delayval);
+    pixels.show();
+    delay(DELAYFADE);
   }
+}
+
+void rotate(bool right) {
+  pixel_t *pxValues = (pixel_t*) pixels.getPixels();
+  if (right) pxValues += NUMPIXELS - 1;
+  pixel_t first = *pxValues;
+  for (int i = 0; i < NUMPIXELS - 1; i++) {
+    if (right) {
+      pxValues[0] = pxValues[-1];
+      pxValues--;
+    } else {
+      pxValues[0] = pxValues[1];
+      pxValues++;
+    }
+  }
+  pxValues[0] = first;
+
+  pixels.show();
 }
 
 void setup() {
   pixels.begin(); // This initializes the NeoPixel library.
+
+  Serial.begin(SERIAL_BAUD_RATE);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+
+  //synchronize on 0
+  while(Serial.read() != 0) {
+    ;
+  }
+
+  patternSingle(BLACK);
+  applyInstant();
 }
 
 void loop() {
-  target[0] = 0;
-  target[1] = 0;
-  target[2] = 0;
-  fadeTo();
-  delay(delayval * 50);
-
-  target[0] = 10;
-  target[1] = 10;
-  target[2] = 10;
-  fadeTo();
-  delay(delayval * 50);
-
-  spinner(2);
-
-  target[0] = 0;
-  target[1] = 0;
-  target[2] = 0;
-  fadeTo();
-  delay(delayval * 50);
+  if (Serial.available() >= sizeof(uint32_t)) {
+    uint32_t color;
+    Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
+    patternSingle(color);
+    applyInstant();
+  }
   
-//  target[0] = 10;
-//  target[1] = 0;
-//  target[2] = 0;
+  
+//  patternSingle(BLACK);
+//  applyInstant();
+//  delay(500);
+//  patternSingle(WHITE_3000K);
 //  fadeTo();
-//  delay(delayval * 50);
-//
-//  target[0] = 10;
-//  target[1] = 10;
-//  target[2] = 0;
+//  delay(5000);
+//  patternSingle(WHITE_6500K);
 //  fadeTo();
-//  delay(delayval * 50);
-//
-//  target[0] = 0;
-//  target[1] = 10;
-//  target[2] = 0;
+//  delay(5000);
+//  patternSingle(BLACK);
 //  fadeTo();
-//  delay(delayval * 50);
-//
-//  target[0] = 0;
-//  target[1] = 10;
-//  target[2] = 10;
-//  fadeTo();
-//  delay(delayval * 50);
-//
-//  target[0] = 0;
-//  target[1] = 0;
-//  target[2] = 10;
-//  fadeTo();
-//  delay(delayval * 50);
-//
-//  target[0] = 10;
-//  target[1] = 0;
-//  target[2] = 10;
-//  fadeTo();
-//  delay(delayval * 50);
+//  delay(500);
+  
+//  for (int i = 0; i < NUMPIXELS; i++) {
+//    pixels.setPixelColor(i, i%2 ? BLACK : i%4 ? WHITE_6500K : WHITE_3000K);
+//  }
+//  pixels.show();
+//  while(true) {
+//    rotate(true);
+//    delay(delayval);
+//  }
 }
 
