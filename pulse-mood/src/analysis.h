@@ -32,7 +32,6 @@
 // for smoothing (average) or derivative
 #define PEAK_HISTORY_SIZE  100
 #define PEAK_HISTORY_LOCAL 4
-#define BEAT_BAND 4
 
 class Analysis : public QObject
 {
@@ -52,6 +51,8 @@ class Analysis : public QObject
     
     void debugPrint();
     
+    constexpr static const std::array<int, 4> BEAT_BANDS = {4, 5, 6, 7};
+    
   private:
     //QMutex mutex;
     
@@ -64,7 +65,8 @@ class Analysis : public QObject
     
     double peak;
     double peakHistory[PEAK_HISTORY_SIZE];
-    double beatHistory[PEAK_HISTORY_SIZE];
+    double beatHistory[BEAT_BANDS.size()][PEAK_HISTORY_LOCAL];
+    //double beatHistory[PEAK_HISTORY_SIZE];
     double averagePeak;
     double smoothPeak;
     double beatFactor;

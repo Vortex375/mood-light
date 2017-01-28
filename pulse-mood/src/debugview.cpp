@@ -28,7 +28,7 @@ DebugView::DebugView(const Analysis * analysis, size_t nBands) : QWidget(),
   analysis(analysis),
   nBands(nBands)
 {
-  setFixedSize(QSize(400, 300));
+  setFixedSize(QSize(400, 500));
 }
 
 DebugView::~DebugView()
@@ -60,12 +60,13 @@ void DebugView::paintEvent(QPaintEvent *event)
     } else {
       painter.fillRect(i * 20 + 5, 250, 10, -val, Qt::blue);
     }
+    painter.drawText(i * 20 + 5, 260, QString::number(i));
   }
   
   if (beatFactor > 1.3)
-    painter.fillRect(200 - beatFactor * 30, 260, beatFactor * 60, 10, Qt::green);
+    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::green);
   else
-    painter.fillRect(200 - beatFactor * 30, 260, beatFactor * 60, 10, Qt::red);
+    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::red);
   
   painter.setPen(Qt::red);
   painter.drawLine(0, 250, 400, 250);

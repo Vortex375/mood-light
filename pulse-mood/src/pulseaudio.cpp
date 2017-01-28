@@ -113,33 +113,40 @@ void PulseAudio::paRead()
     assert(nSamples > 0);
     
     peak = 0.0;
+    double localPeak;
     
     if (nSamples >= bufferSize) {
       //replace whole buffer
-      for (int i = 0; i < bufferSize; i++) {
+      for (unsigned int i = 0; i < bufferSize; i++) {
         buffer[i] = data[i];
-        if (buffer[i] > peak) peak = buffer[i];
+        localPeak = buffer[i] * buffer[i];
+        if (localPeak > peak) peak = localPeak;
       }
     } else { // nSamples < bufferSize
       // shift contents of buffer making room for the new samples
-      for (int i = 0; i < bufferSize - nSamples; i++) {
+      for (unsigned int i = 0; i < bufferSize - nSamples; i++) {
         buffer[i] = buffer[i+nSamples];
-        if (buffer[i] > peak) peak = buffer[i];
+        localPeak = buffer[i] * buffer[i];
+        if (localPeak > peak) peak = localPeak;
       }
-      int j = 0;
-      for (int i = bufferSize - nSamples; i < bufferSize; i++) {
+      unsigned int j = 0;
+      for (unsigned int i = bufferSize - nSamples; i < bufferSize; i++) {
         buffer[i] = data[j++];
-        if (buffer[i] > peak) peak = buffer[i];
+        localPeak = buffer[i] * buffer[i];
+        if (localPeak > peak) peak = localPeak;
       }
       assert(j == nSamples);
     }
     
     paHaveRead += nSamples;
+//     qDebug() << "read" << nBytes << "bytes from pulseaudio.";
 //     paReadTotal += nSamples;
 //     paReadAttempts++;
     pa_stream_drop(recordStream);
   }
-  //qDebug() << "read" << nBytes << "bytes from pulseaudio.";
+  
+  // use logarithmic scale for peak
+  //peak = std::log10(peak * 100) / 2;
   
   emit haveData();
 }
@@ -243,12 +250,12 @@ void PulseAudio::debugPrint()
 //   }
   
   double max = 0;
-  for (int i = 0; i < bufferSize; i++) {
+  for (unsigned int i = 0; i < bufferSize; i++) {
     double val = std::abs(buffer[i]);
     if (val > max) max = val;
     //printf("%f ", buffer[i]);
   }
-  printf("AUDIO DATA (peak): %f (%d)\n", max, paHaveRead);
+  printf("AUDIO DATA (peak): %f (%zu)\n", max, paHaveRead);
   
 }
 
