@@ -2,12 +2,12 @@
 #include <QDebug>
 #include <QCoreApplication>
 #include <QApplication>
+#include <QTimer>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 
-#include "fft.h"
 #include "pulseaudio.h"
 #include "analysis.h"
 #include "debugview.h"
@@ -45,6 +45,10 @@ void signal_callback_handler(int signum) {
     }
 }
 
+#define FRAME_SIZE      2048
+#define FRAME_DURATION    20 // 50 FPS
+#define ANALYSIS_BANDS    20
+
 int main(int argc, char **argv) {
     // register signal traps
     // this is so we can clean up and remove the pulseaudio sink we created
@@ -63,35 +67,32 @@ int main(int argc, char **argv) {
     //fft.debugPrint();
 
     Serial serial(&app);
-    PulseAudio pulseAudio(&app, 2048);
-    FFT fft(2048);
-    Analysis analysis(&app, 2048, 20);
-    DebugView debugView(&analysis, 20);
+    PulseAudio pulseAudio(&app, FRAME_SIZE);
+    Analysis analysis(&app, FRAME_SIZE, ANALYSIS_BANDS);
+    DebugView debugView(&analysis, ANALYSIS_BANDS);
 
     QColor baseColor(255, 180, 107);
     baseColor = baseColor.toHsv();
 
-    app.connect(&pulseAudio, &PulseAudio::haveData, [&]() {
+    QTimer frameTimer;
+    frameTimer.setInterval(FRAME_DURATION);
+    app.connect(&frameTimer, &QTimer::timeout, [&]() {
         //pulseAudio.debugPrint();
-        printf("PEAK: %f\n", pulseAudio.getPeak());
-        const double *data = pulseAudio.getData();
-        fft.pushDataFiltered(data);
-        fft.execute();
-        //fft.debugPrint();
-        const double *fftData = fft.getData();
+        //printf("PEAK: %f\n", pulseAudio.getPeak());
+        analysis.update(pulseAudio.getData());
         analysis.updatePeak(pulseAudio.getPeak());
-        analysis.updateBands(fftData);
         //const double* bands = analysis.getBands();
 
-        printf("BEAT: %f\n", analysis.getBeatFactor());
-        analysis.debugPrint();
+        //printf("BEAT: %f\n", analysis.getBeatFactor());
+        //analysis.debugPrint();
         debugView.update();
 
         // write to
         int h,s,v;
         baseColor.getHsv(&h, &s, &v);
-        v *= analysis.getAveragePeak();
+        v = std::max(0, std::min(255, (int) (v * analysis.getAveragePeak())));
         QColor currentColor = QColor::fromHsv(h, s, v);
+        //qDebug() << "H:" << h << "S:" << s << "V:" << v;
         currentColor.getRgb(&h, &s, &v); // misusing hsv as rgb
         uint32_t colorValue = ((h & 0xFF) << 24) | ((s & 0xFF) << 16) | ((v & 0xFF) << 8);
 
@@ -102,6 +103,7 @@ int main(int argc, char **argv) {
     qDebug() << "Starting main loop...";
 
     debugView.show();
+    frameTimer.start();
 
     return app.exec();
 }

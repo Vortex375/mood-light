@@ -24,14 +24,18 @@
 #define ANALYSIS_H
 
 #include <QObject>
+#include <QTime>
+
+#include "fft.h"
 
 #define VIS_DELAY   2
 #define VIS_FALLOFF 2
 
 // how many samples to keep for sliding window
 // for smoothing (average) or derivative
-#define PEAK_HISTORY_SIZE  100
-#define PEAK_HISTORY_LOCAL 4
+#define PEAK_HISTORY_SIZE  25               // about 500ms
+#define PEAK_HISTORY_LOCAL 4                // about  80ms
+#define BEAT_HISTORY_LOCAL 1                // about  40ms
 
 class Analysis : public QObject
 {
@@ -40,36 +44,44 @@ class Analysis : public QObject
   public:
     Analysis(QObject *parent, const int fftSize, const int nBands);
     ~Analysis();
-    
+
+    void update(const double *audioData);
     void updatePeak(const double peak);
-    void updateBands(const double *fftData);
     const double* getBands() const;
+    const double* getBeatBandsAverage() const;
+    const double* getBeatBandsFactor() const;
     double getPeak() const;
     double getSmoothPeak() const;
     double getAveragePeak() const;
     double getBeatFactor() const;
     
     void debugPrint();
-    
-    constexpr static const std::array<int, 4> BEAT_BANDS = {4, 5, 6, 7};
+
+    constexpr static std::array<int, 4> BEAT_BANDS = {3, 4, 5, 6};
     
   private:
     //QMutex mutex;
-    
+
+    FFT fft;
+    FFT beatFFT;
+    QTime debugTime;
+
     const int fftSize;
     const int nBands;
     
-    double *logScale;
+    float *logScale;
     double *bands;
-    int *delay;
     
     double peak;
     double peakHistory[PEAK_HISTORY_SIZE];
-    double beatHistory[BEAT_BANDS.size()][PEAK_HISTORY_LOCAL];
-    //double beatHistory[PEAK_HISTORY_SIZE];
+    double beatHistory[BEAT_BANDS.size()][PEAK_HISTORY_SIZE];
+    double beatAverage[BEAT_BANDS.size()];
+    double beatBandsFactor[BEAT_BANDS.size()];
     double averagePeak;
     double smoothPeak;
     double beatFactor;
+
+    void updateBands(const double* fftData);
 };
 
 #endif // ANALYSIS_H

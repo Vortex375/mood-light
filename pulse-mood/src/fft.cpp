@@ -50,6 +50,11 @@ FFT::~FFT()
   delete[] data;
 }
 
+
+void FFT::pushData(const double *newData) {
+  memcpy(data, newData, sizeof(double) * fftSize);
+}
+
 void FFT::pushDataFiltered(const double* newData)
 {
   double *inData = (double *) data;
@@ -87,3 +92,4 @@ void FFT::debugPrint()
   }
   printf("\n");
 }
+

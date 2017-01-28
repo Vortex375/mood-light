@@ -39,11 +39,13 @@ DebugView::~DebugView()
 void DebugView::paintEvent(QPaintEvent *event)
 {
   const double *bands = analysis->getBands();
+  const double *beatBandAverage = analysis->getBeatBandsAverage();
+  const double *beatBandsFactor = analysis->getBeatBandsFactor();
   double peak = analysis->getSmoothPeak();
   double avgPeak = analysis->getAveragePeak();
-  double beatFactor = analysis->getBeatFactor();
+//  double beatFactor = analysis->getBeatFactor();
   
-  if (beatFactor < 1.0) beatFactor = 1.0;
+//  if (beatFactor < 1.0) beatFactor = 1.0;
   
   QPainter painter(this);
   
@@ -52,7 +54,13 @@ void DebugView::paintEvent(QPaintEvent *event)
   painter.setOpacity(0.6);
   painter.fillRect(5, 250 - peak * 100, 10, peak * 100, Qt::red);
   painter.setOpacity(1.0);
-  
+
+  for (int i = 0; i < Analysis::BEAT_BANDS.size(); i++) {
+    double val = beatBandAverage[i] * 100;
+    painter.fillRect(Analysis::BEAT_BANDS[i] * 20 + 5, 250 - val, 10, val, Qt::darkGray);
+  }
+
+  painter.setOpacity(0.6);
   for (int i = 1; i < nBands; i++) {
     double val = bands[i];
     if (val > 0) {
@@ -62,11 +70,25 @@ void DebugView::paintEvent(QPaintEvent *event)
     }
     painter.drawText(i * 20 + 5, 260, QString::number(i));
   }
-  
-  if (beatFactor > 1.3)
-    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::green);
-  else
-    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::red);
+  painter.setOpacity(1.0);
+
+  double maxBeatFactor = 1.0;
+  for (int i = 0; i < Analysis::BEAT_BANDS.size(); i++) {
+    double beatFactor = beatBandsFactor[i] ;
+    if (beatFactor > maxBeatFactor) maxBeatFactor = beatFactor;
+    if (beatFactor > 1.3)
+      painter.fillRect(200 - beatFactor * 30, 270 + 15 * i, beatFactor * 60, 10, Qt::green);
+    else
+      painter.fillRect(200 - beatFactor * 30, 270 + 15 * i, beatFactor * 60, 10, Qt::red);
+    painter.drawText(200, 280 + 15 * i, QString::number(Analysis::BEAT_BANDS[i]));
+  }
+  painter.fillRect(200 - maxBeatFactor * 30, 270 + 15 * Analysis::BEAT_BANDS.size(), maxBeatFactor * 60, 10, Qt::darkYellow);
+  painter.drawText(200, 280 + 15 * Analysis::BEAT_BANDS.size(), "*");
+
+//  if (beatFactor > 1.3)
+//    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::green);
+//  else
+//    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::red);
   
   painter.setPen(Qt::red);
   painter.drawLine(0, 250, 400, 250);

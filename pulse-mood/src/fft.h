@@ -33,7 +33,8 @@ class FFT
   public:
     FFT(const int fftSize);
     ~FFT();
-    
+
+    void pushData(const double *newData);
     void pushDataFiltered(const double *newData); // push new input data, filtered by Hamming window
     void execute();
     

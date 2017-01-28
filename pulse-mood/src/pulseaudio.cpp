@@ -30,13 +30,14 @@
 #include <assert.h>
 
 PulseAudio::PulseAudio(QObject* parent, const size_t bufferSize) :
-  QObject(parent),
-  bufferSize(bufferSize),
-  paConnected(false),
-  recording(false)
+    QObject(parent),
+    bufferSize(bufferSize),
+    paConnected(false),
+    recording(false)
 {
   // init buffer
   buffer = new double[bufferSize]{};
+  peak = 0;
   
   // set up connection to pulseaudio
   paMainloop = pa_glib_mainloop_new(NULL);
@@ -97,6 +98,7 @@ void PulseAudio::paRead()
   size_t nSamples;
   const float* data;
   paHaveRead = 0;
+  peak = 0.0;
   
   while(paHaveRead < bufferSize && pa_stream_readable_size(recordStream) > 0) {
     pa_stream_peek(recordStream, (const void**) &data, &nBytes);
@@ -111,28 +113,26 @@ void PulseAudio::paRead()
     
     nSamples = nBytes / sizeof(float); // sample data is in PA_SAMPLE_FLOAT32 format
     assert(nSamples > 0);
-    
-    peak = 0.0;
+
     double localPeak;
-    
     if (nSamples >= bufferSize) {
       //replace whole buffer
       for (unsigned int i = 0; i < bufferSize; i++) {
         buffer[i] = data[i];
-        localPeak = buffer[i] * buffer[i];
+        localPeak = buffer[i];
         if (localPeak > peak) peak = localPeak;
       }
     } else { // nSamples < bufferSize
       // shift contents of buffer making room for the new samples
       for (unsigned int i = 0; i < bufferSize - nSamples; i++) {
         buffer[i] = buffer[i+nSamples];
-        localPeak = buffer[i] * buffer[i];
+        localPeak = buffer[i];
         if (localPeak > peak) peak = localPeak;
       }
       unsigned int j = 0;
       for (unsigned int i = bufferSize - nSamples; i < bufferSize; i++) {
         buffer[i] = data[j++];
-        localPeak = buffer[i] * buffer[i];
+        localPeak = buffer[i];
         if (localPeak > peak) peak = localPeak;
       }
       assert(j == nSamples);
@@ -147,7 +147,7 @@ void PulseAudio::paRead()
   
   // use logarithmic scale for peak
   //peak = std::log10(peak * 100) / 2;
-  
+
   emit haveData();
 }
 
@@ -189,12 +189,10 @@ void PulseAudio::paStateCallback(pa_context* context, void* userdata)
       that->paConnected = false;
       qWarning() << "Connection to pulseaudio failed.";
       std::exit(2);
-      break;
     case PA_CONTEXT_TERMINATED:
       that->paConnected = false;
       qDebug() << "Connection to pulseaudio closed.";
       std::exit(2);
-      break;
   }
 }
 

@@ -31,16 +31,17 @@
 
 Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
   QObject(parent),
+  fft(fftSize),
+  beatFFT(PEAK_HISTORY_SIZE),
   fftSize(fftSize),
   nBands(nBands)
 {
   bands = new double[nBands];
-  delay = new int[nBands];
-  logScale = new double[nBands + 1];
+  logScale = new float[nBands + 1];
   
   // initialize logarithmic scale
   for (int i = 0; i <= nBands; i++) {
-    logScale[i] = pow(fftSize / 2, (double) i / nBands) - 0.5;
+    logScale[i] = pow(fftSize / 2, (float) i / nBands) - 0.5;
   }
   
   qDebug() << "LOG SCALE:";
@@ -51,26 +52,56 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
   
   // initialize bands
   std::memset(bands, 0, nBands * sizeof(double));
-  std::memset(delay, 0, nBands * sizeof(int));
+  std::memset(beatBandsFactor, 0, BEAT_BANDS.size() * sizeof(double));
 }
 
 Analysis::~Analysis()
 {
   delete[] bands;
-  delete[] delay;
   delete[] logScale;
+}
+
+void Analysis::update(const double *audioData)
+{
+  fft.pushDataFiltered(audioData);
+  fft.execute();
+
+  updateBands(fft.getData());
+}
+
+void Analysis::updatePeak(const double peak_)
+{
+  peak = peak_ * peak_;
+  smoothPeak = 0.0;
+  averagePeak = 0.0;
+
+  for (int i = 0; i < PEAK_HISTORY_SIZE - 1; i++) {
+   peakHistory[i] = peakHistory[i+1];
+   averagePeak += peakHistory[i] / PEAK_HISTORY_SIZE;
+   if (i >= PEAK_HISTORY_SIZE - PEAK_HISTORY_LOCAL) {
+     smoothPeak += peakHistory[i] / PEAK_HISTORY_LOCAL;
+   }
+  }
+  peakHistory[PEAK_HISTORY_SIZE - 1] = peak;
+  averagePeak += peak / PEAK_HISTORY_SIZE;
+  smoothPeak += peak / PEAK_HISTORY_LOCAL;
+
+  beatFactor = smoothPeak / averagePeak;
+
+  beatFFT.pushDataFiltered(peakHistory);
+  beatFFT.execute();
 }
 
 void Analysis::updateBands(const double* fftData)
 {
   //QMutexLocker(&mutex);
-  
+
   for (int i = 0; i < nBands; i++) {
     int a = ceil(logScale[i]);
     int b = floor(logScale[i+1]);
     double n = 0; // accumulator
     double x = 0;
-    
+
     if (b < a) {
       n += fftData[b] * (logScale[i + 1] - logScale[i]);
     } else {
@@ -85,64 +116,31 @@ void Analysis::updateBands(const double* fftData)
         n += fftData[b] * (logScale[i + 1] - b);
       }
     }
-    
-    //x = 60 + 80 * log10(n / 200);
+
     x = 50 + 60 * log10(n / 120);
     bands[i] = std::max(0.0, std::min(x, 250.0));
-    
-//     if (n > 0) {
-//       // 40dB range clamp
-//       x = 20 * log10(n);
-//       x = std::max(0.0, std::min(x, 40.0));
-//     }
-//       
-//     bands[i] -= std::max(0, VIS_FALLOFF - delay[i]);
-//     if (bands[i] < 0) {
-//       bands[i] = 0;
-//     }
-//     if (delay[i] > 0) {
-//       delay[i]--;
-//     }
-//     if (x > bands[i]) {
-//       bands[i] = x;
-//       delay[i] = VIS_DELAY;
-//     }
-    
-//     double beatAvg = 0.0;
-//     double beatLocal = 0.0;
-//     for (int i = 0; i < PEAK_HISTORY_SIZE - 1; i++) {
-//       beatHistory[i] = beatHistory[i+1];
-//       beatAvg += beatHistory[i] / PEAK_HISTORY_SIZE;
-//       if (i > PEAK_HISTORY_SIZE - PEAK_HISTORY_LOCAL) {
-//         beatLocal += beatHistory[i] / PEAK_HISTORY_LOCAL;
-//       }
-//     }
-//     beatHistory[PEAK_HISTORY_SIZE - 1] = bands[BEAT_BAND];
-//     beatAvg += bands[BEAT_BAND] / PEAK_HISTORY_SIZE;
-//     beatLocal += bands[BEAT_BAND] / PEAK_HISTORY_LOCAL;
-//     
-//     beatFactor = beatLocal / beatAvg;
   }
-}
 
-void Analysis::updatePeak(const double peak_)
-{
-  peak = peak_;
-  smoothPeak = 0.0;
-  averagePeak = 0.0;
-  
-  for (int i = 0; i < PEAK_HISTORY_SIZE - 1; i++) {
-   peakHistory[i] = peakHistory[i+1]; 
-   averagePeak += peakHistory[i] / PEAK_HISTORY_SIZE;
-   if (i > PEAK_HISTORY_SIZE - PEAK_HISTORY_LOCAL) {
-     smoothPeak += peakHistory[i] / PEAK_HISTORY_LOCAL;
-   }
+  for (int i = 0; i < BEAT_BANDS.size(); i++) {
+    double avg = 0.0;
+    double localAvg = 0.0;
+    for (int j = 0; j < PEAK_HISTORY_SIZE - 1; j++) {
+      beatHistory[i][j] = beatHistory[i][j+1];
+      avg += beatHistory[i][j] / PEAK_HISTORY_SIZE;
+      if (i >= PEAK_HISTORY_SIZE - BEAT_HISTORY_LOCAL) {
+        localAvg += peakHistory[i] / BEAT_HISTORY_LOCAL;
+      }
+    }
+    beatHistory[i][PEAK_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]] / 100, 2);
+    avg += beatHistory[i][PEAK_HISTORY_SIZE - 1] / PEAK_HISTORY_SIZE;
+    localAvg += beatHistory[i][PEAK_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
+    beatAverage[i] = avg;
+    if (avg > 0.1) {
+      beatBandsFactor[i] = (beatBandsFactor[i] + std::max(1.0, localAvg / avg)) / 2;
+    } else {
+      beatBandsFactor[i] = 1.0;
+    }
   }
-  peakHistory[PEAK_HISTORY_SIZE - 1] = peak_;
-  averagePeak += peak_ / PEAK_HISTORY_SIZE;
-  smoothPeak += peak_ / PEAK_HISTORY_LOCAL;
-  
-  beatFactor = smoothPeak / averagePeak;
 }
 
 double Analysis::getPeak() const
@@ -170,6 +168,14 @@ const double * Analysis::getBands() const
   return bands;
 }
 
+const double *Analysis::getBeatBandsAverage() const {
+  return beatAverage;
+}
+
+const double *Analysis::getBeatBandsFactor() const {
+  return beatBandsFactor;
+}
+
 void Analysis::debugPrint()
 {
   printf("BANDS:\n");
@@ -178,5 +184,7 @@ void Analysis::debugPrint()
   }
   printf("\n");
 }
+
+constexpr std::array<int, 4> Analysis::BEAT_BANDS;
 
 #include "analysis.moc"

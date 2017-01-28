@@ -68,9 +68,6 @@ signals:
     
     // for debug
     size_t paHaveRead;
-    //size_t paReadTotal;
-    //size_t paReadAttempts;
-    //std::chrono::time_point<std::chrono::system_clock> lastDebug;
     
     void paRead();
     
