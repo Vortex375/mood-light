@@ -90,7 +90,8 @@ int main(int argc, char **argv) {
         // write to
         int h,s,v;
         baseColor.getHsv(&h, &s, &v);
-        v = std::max(0, std::min(255, (int) (v * analysis.getAveragePeak())));
+        double factor = analysis.getAveragePeak() * 0.7 * analysis.getBeatFactor();
+        v = std::max(0, std::min(255, (int) (v * factor)));
         QColor currentColor = QColor::fromHsv(h, s, v);
         //qDebug() << "H:" << h << "S:" << s << "V:" << v;
         currentColor.getRgb(&h, &s, &v); // misusing hsv as rgb

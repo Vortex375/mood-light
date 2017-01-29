@@ -53,6 +53,10 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
   // initialize bands
   std::memset(bands, 0, nBands * sizeof(double));
   std::memset(beatBandsFactor, 0, BEAT_BANDS.size() * sizeof(double));
+  beatFactor = 1.0;
+  lockOnFactor = 1.0;
+  lockOnBand = -1;
+  lockOnIntensity = 0;
 }
 
 Analysis::~Analysis()
@@ -85,8 +89,6 @@ void Analysis::updatePeak(const double peak_)
   peakHistory[PEAK_HISTORY_SIZE - 1] = peak;
   averagePeak += peak / PEAK_HISTORY_SIZE;
   smoothPeak += peak / PEAK_HISTORY_LOCAL;
-
-  beatFactor = smoothPeak / averagePeak;
 
   beatFFT.pushDataFiltered(peakHistory);
   beatFFT.execute();
@@ -121,24 +123,80 @@ void Analysis::updateBands(const double* fftData)
     bands[i] = std::max(0.0, std::min(x, 250.0));
   }
 
+  //beatFactor = 1.0;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
     double avg = 0.0;
     double localAvg = 0.0;
-    for (int j = 0; j < PEAK_HISTORY_SIZE - 1; j++) {
+    for (int j = 0; j < BEAT_HISTORY_SIZE - 1; j++) {
       beatHistory[i][j] = beatHistory[i][j+1];
-      avg += beatHistory[i][j] / PEAK_HISTORY_SIZE;
-      if (i >= PEAK_HISTORY_SIZE - BEAT_HISTORY_LOCAL) {
-        localAvg += peakHistory[i] / BEAT_HISTORY_LOCAL;
+      avg += beatHistory[i][j] / BEAT_HISTORY_SIZE;
+      if (j >= BEAT_HISTORY_SIZE - BEAT_HISTORY_LOCAL) {
+        localAvg += beatHistory[i][j] / BEAT_HISTORY_LOCAL;
       }
     }
-    beatHistory[i][PEAK_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]] / 100, 2);
-    avg += beatHistory[i][PEAK_HISTORY_SIZE - 1] / PEAK_HISTORY_SIZE;
-    localAvg += beatHistory[i][PEAK_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
+    beatHistory[i][BEAT_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]] / 100, 2);
+    avg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_SIZE;
+    localAvg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
     beatAverage[i] = avg;
-    if (avg > 0.1) {
+    /*if (avg > 0.2 || localAvg > 0.2) { // mask small local maxima
       beatBandsFactor[i] = (beatBandsFactor[i] + std::max(1.0, localAvg / avg)) / 2;
     } else {
       beatBandsFactor[i] = 1.0;
+    }*/
+    if (avg > 0.2 || localAvg > 0.2) {
+      beatBandsFactor[i] = std::max(1.0, localAvg / avg);
+    } else {
+      beatBandsFactor[i] = 1.0;
+    }
+  }
+  updateBeatFactor();
+//  if (newPeak > beatFactor && newPeak > BEAT_THRESHOLD) {
+//    beatFactor = newPeak;
+//  } else if (beatFactor > 1.0) {
+//    // decay
+//    beatFactor = beatFactor - (beatFactor - 1) / 2;
+//  }
+}
+
+void Analysis::updateBeatFactor() {
+  int newBand = -1;
+  double newFactor = BEAT_THRESHOLD;
+  for (int i = 0; i < BEAT_BANDS.size(); i++) {
+    if (beatBandsFactor[i] > newFactor) {
+      newFactor = beatBandsFactor[i];
+      newBand = i;
+    }
+  }
+  if (lockOnBand < 0 && newBand >= 0) { // new
+    beatFactor = newFactor;
+    lockOnFactor = newFactor;
+    lockOnIntensity = bands[BEAT_BANDS[newBand]];
+    lockOnBand = newBand;
+    qDebug() << "BEAT: NEW" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
+  } else if (newBand >= 0
+          && bands[BEAT_BANDS[newBand]] > lockOnIntensity * 1.1
+          && newFactor > beatFactor) { // switch band
+    beatFactor = newFactor;
+    lockOnFactor = newFactor;
+    lockOnIntensity = bands[BEAT_BANDS[newBand]];;
+    lockOnBand = newBand;
+    qDebug() << "BEAT: SWITCH" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t"
+             << beatFactor;
+  } else if (newBand >= 0 && newBand == lockOnBand
+          && newFactor > lockOnFactor * 0.9
+          && bands[BEAT_BANDS[newBand]] > lockOnIntensity * 0.9) {
+    beatFactor = newFactor;
+    if (newFactor > lockOnFactor) lockOnFactor = newFactor;
+    qDebug() << "BEAT: REFILL" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
+  } else if (lockOnBand >= 0) { // decay
+    qDebug() << "BEAT: DECAY" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
+    beatFactor = beatFactor - (beatFactor - 1) / 4;
+    if (beatFactor < 1.01) {
+      qDebug() << "BEAT: FREE";
+      beatFactor = 1.0;
+      lockOnFactor = 1.0;
+      lockOnIntensity = 0;
+      lockOnBand = -1;
     }
   }
 }
@@ -160,7 +218,7 @@ double Analysis::getAveragePeak() const
 
 double Analysis::getBeatFactor() const
 {
-  return beatFactor;
+  return 1 + (beatFactor - 1) * pow((lockOnIntensity) / 100, 2);
 }
 
 const double * Analysis::getBands() const
@@ -174,6 +232,10 @@ const double *Analysis::getBeatBandsAverage() const {
 
 const double *Analysis::getBeatBandsFactor() const {
   return beatBandsFactor;
+}
+
+int Analysis::getBeatLockOnBand() const {
+  return lockOnBand;
 }
 
 void Analysis::debugPrint()

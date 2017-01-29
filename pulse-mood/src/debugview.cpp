@@ -41,6 +41,8 @@ void DebugView::paintEvent(QPaintEvent *event)
   const double *bands = analysis->getBands();
   const double *beatBandAverage = analysis->getBeatBandsAverage();
   const double *beatBandsFactor = analysis->getBeatBandsFactor();
+  double maxBeatFactor = analysis->getBeatFactor();
+  int lockOnBand = analysis->getBeatLockOnBand();
   double peak = analysis->getSmoothPeak();
   double avgPeak = analysis->getAveragePeak();
 //  double beatFactor = analysis->getBeatFactor();
@@ -72,10 +74,8 @@ void DebugView::paintEvent(QPaintEvent *event)
   }
   painter.setOpacity(1.0);
 
-  double maxBeatFactor = 1.0;
   for (int i = 0; i < Analysis::BEAT_BANDS.size(); i++) {
     double beatFactor = beatBandsFactor[i] ;
-    if (beatFactor > maxBeatFactor) maxBeatFactor = beatFactor;
     if (beatFactor > 1.3)
       painter.fillRect(200 - beatFactor * 30, 270 + 15 * i, beatFactor * 60, 10, Qt::green);
     else
@@ -83,7 +83,7 @@ void DebugView::paintEvent(QPaintEvent *event)
     painter.drawText(200, 280 + 15 * i, QString::number(Analysis::BEAT_BANDS[i]));
   }
   painter.fillRect(200 - maxBeatFactor * 30, 270 + 15 * Analysis::BEAT_BANDS.size(), maxBeatFactor * 60, 10, Qt::darkYellow);
-  painter.drawText(200, 280 + 15 * Analysis::BEAT_BANDS.size(), "*");
+  painter.drawText(200, 280 + 15 * Analysis::BEAT_BANDS.size(), lockOnBand < 0 ? "-" : QString::number(Analysis::BEAT_BANDS[lockOnBand]));
 
 //  if (beatFactor > 1.3)
 //    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::green);

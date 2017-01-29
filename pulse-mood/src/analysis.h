@@ -34,8 +34,11 @@
 // how many samples to keep for sliding window
 // for smoothing (average) or derivative
 #define PEAK_HISTORY_SIZE  25               // about 500ms
-#define PEAK_HISTORY_LOCAL 4                // about  80ms
-#define BEAT_HISTORY_LOCAL 1                // about  40ms
+#define PEAK_HISTORY_LOCAL  4               // about  80ms
+#define BEAT_HISTORY_SIZE   10              // about 500ms
+#define BEAT_HISTORY_LOCAL  1               // about  20ms
+
+#define BEAT_THRESHOLD      1.4
 
 class Analysis : public QObject
 {
@@ -54,6 +57,7 @@ class Analysis : public QObject
     double getSmoothPeak() const;
     double getAveragePeak() const;
     double getBeatFactor() const;
+    int getBeatLockOnBand() const;
     
     void debugPrint();
 
@@ -74,14 +78,19 @@ class Analysis : public QObject
     
     double peak;
     double peakHistory[PEAK_HISTORY_SIZE];
-    double beatHistory[BEAT_BANDS.size()][PEAK_HISTORY_SIZE];
+    double beatHistory[BEAT_BANDS.size()][BEAT_HISTORY_SIZE];
     double beatAverage[BEAT_BANDS.size()];
     double beatBandsFactor[BEAT_BANDS.size()];
     double averagePeak;
     double smoothPeak;
+
     double beatFactor;
+    int lockOnBand;
+    double lockOnFactor;
+    double lockOnIntensity;
 
     void updateBands(const double* fftData);
+    void updateBeatFactor();
 };
 
 #endif // ANALYSIS_H
