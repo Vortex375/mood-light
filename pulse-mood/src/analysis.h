@@ -38,7 +38,7 @@
 #define BEAT_HISTORY_SIZE   10              // about 200ms
 #define BEAT_HISTORY_LOCAL  1               // about  20ms
 
-#define BEAT_THRESHOLD      1.5
+#define BEAT_THRESHOLD      1.4
 
 class Analysis : public QObject
 {

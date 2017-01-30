@@ -71,7 +71,14 @@ int main(int argc, char **argv) {
     Analysis analysis(&app, FRAME_SIZE, ANALYSIS_BANDS);
     DebugView debugView(&analysis, ANALYSIS_BANDS);
 
-    QColor baseColor(255, 180, 107);
+//    QColor baseColor(255, 180, 107);    // warm white
+    QColor baseColor(103,58,183);         // deep purple
+//    QColor baseColor(33,150,243);       // blue
+//    QColor baseColor(0,150,136);        // teal
+//    QColor baseColor(139,195,74);       // light green
+//    QColor baseColor(205,220,57);       // lime
+//    QColor baseColor(255,152,0);        // orange
+//    QColor baseColor(255,87,34);        // deep orange
     baseColor = baseColor.toHsv();
 
     QTimer frameTimer;
@@ -90,7 +97,7 @@ int main(int argc, char **argv) {
         // write to
         int h,s,v;
         baseColor.getHsv(&h, &s, &v);
-        double factor = analysis.getAveragePeak() * 0.7 * analysis.getBeatFactor();
+        double factor = analysis.getAveragePeak() * 0.8 * analysis.getBeatFactor();
         v = std::max(0, std::min(255, (int) (v * factor)));
         QColor currentColor = QColor::fromHsv(h, s, v);
         //qDebug() << "H:" << h << "S:" << s << "V:" << v;

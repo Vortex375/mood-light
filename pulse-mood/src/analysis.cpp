@@ -162,7 +162,7 @@ void Analysis::updateBeatFactor() {
   int newBand = -1;
   double newFactor = BEAT_THRESHOLD;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
-    if (beatBandsFactor[i] > newFactor) {
+    if (beatBandsFactor[i] > newFactor + (0.01/(beatAverage[i]*beatAverage[i]))) {
       newFactor = beatBandsFactor[i];
       newBand = i;
     }
