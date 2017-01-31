@@ -61,7 +61,7 @@ class Analysis : public QObject
     
     void debugPrint();
 
-    constexpr static std::array<int, 4> BEAT_BANDS = {3, 4, 5, 6};
+    constexpr static std::array<int, 5> BEAT_BANDS = {3, 4, 5, 6, 7};
     
   private:
     //QMutex mutex;

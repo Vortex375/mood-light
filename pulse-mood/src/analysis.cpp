@@ -162,7 +162,7 @@ void Analysis::updateBeatFactor() {
   int newBand = -1;
   double newFactor = BEAT_THRESHOLD;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
-    if (beatBandsFactor[i] > newFactor + (0.01/(beatAverage[i]*beatAverage[i]))) {
+    if (beatBandsFactor[i] > newFactor + (0.02/(beatAverage[i]*beatAverage[i]))) {
       newFactor = beatBandsFactor[i];
       newBand = i;
     }
@@ -250,6 +250,6 @@ void Analysis::debugPrint()
   printf("\n");
 }
 
-constexpr std::array<int, 4> Analysis::BEAT_BANDS;
+constexpr std::array<int, 5> Analysis::BEAT_BANDS;
 
 #include "analysis.moc"
