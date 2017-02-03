@@ -29,6 +29,10 @@
 #include <QDebug>
 #include <stdio.h>
 
+constexpr std::array<int, 5> Analysis::BEAT_BANDS;
+constexpr std::array<double, 5> Analysis::BEAT_THRESHOLD;
+constexpr std::array<int, 24> Analysis::BARK_BANDS;
+
 Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
   QObject(parent),
   fft(fftSize),
@@ -38,10 +42,22 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
 {
   bands = new double[nBands];
   logScale = new float[nBands + 1];
+  barkTable = new int[fftSize / 2];
   
   // initialize logarithmic scale
   for (int i = 0; i <= nBands; i++) {
     logScale[i] = pow(fftSize / 2, (float) i / nBands) - 0.5;
+  }
+
+  // initialize bark table
+  int barkBand = 0;
+  for (int i = 0; i < fftSize / 2; i++) {
+    double freq = (double) SAMPLE_RATE / fftSize * i;
+    while (barkBand < BARK_BANDS.size() - 1 && freq >= BARK_BANDS[barkBand]) {
+      barkBand++;
+    }
+    qDebug() << SAMPLE_RATE << "/" << fftSize << "*" <<i << "=" << freq << "->" << barkBand;
+    barkTable[i] = barkBand;
   }
   
   qDebug() << "LOG SCALE:";
@@ -49,10 +65,16 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
     printf("%f ", logScale[i]);
   }
   printf("\n");
+  qDebug() << "BARK TABLE:";
+  for (int i = 0; i < fftSize / 2; i++) {
+    printf("%d ", barkTable[i]);
+  }
+  printf("\n");
   
   // initialize bands
   std::memset(bands, 0, nBands * sizeof(double));
   std::memset(beatBandsFactor, 0, BEAT_BANDS.size() * sizeof(double));
+  std::memset(triSpectrumHistory, 0, 3 * PEAK_HISTORY_SIZE * sizeof(double));
   beatFactor = 1.0;
   lockOnFactor = 1.0;
   lockOnBand = -1;
@@ -71,6 +93,7 @@ void Analysis::update(const double *audioData)
   fft.execute();
 
   updateBands(fft.getData());
+  updateTriSpectrum(fft.getData());
 }
 
 void Analysis::updatePeak(const double peak_)
@@ -89,6 +112,9 @@ void Analysis::updatePeak(const double peak_)
   peakHistory[PEAK_HISTORY_SIZE - 1] = peak;
   averagePeak += peak / PEAK_HISTORY_SIZE;
   smoothPeak += peak / PEAK_HISTORY_LOCAL;
+
+  averagePeak = sqrt(averagePeak);
+  smoothPeak = sqrt(smoothPeak);
 
   beatFFT.pushDataFiltered(peakHistory);
   beatFFT.execute();
@@ -160,13 +186,15 @@ void Analysis::updateBands(const double* fftData)
 
 void Analysis::updateBeatFactor() {
   int newBand = -1;
-  double newFactor = BEAT_THRESHOLD;
+  double newFactor = 0.0;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
-    if (beatBandsFactor[i] > newFactor + (0.02/(beatAverage[i]*beatAverage[i]))) {
-      newFactor = beatBandsFactor[i];
+    if (beatBandsFactor[i] - BEAT_THRESHOLD[i] > newFactor + (0.02/(beatAverage[i]*beatAverage[i]))) {
+      newFactor = beatBandsFactor[i] - 1;
       newBand = i;
     }
   }
+  newFactor += 1;
+
   if (lockOnBand < 0 && newBand >= 0) { // new
     beatFactor = newFactor;
     lockOnFactor = newFactor;
@@ -192,7 +220,7 @@ void Analysis::updateBeatFactor() {
     qDebug() << "BEAT: REFILL" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
   } else if (lockOnBand >= 0) { // decay
     qDebug() << "BEAT: DECAY" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
-    beatFactor = beatFactor - (beatFactor - 1) / 4;
+    beatFactor = beatFactor - (beatFactor - 1) / 6;
     lockOnIntensity = lockOnIntensity * 0.98;
     if (beatFactor < 1.01) {
       qDebug() << "BEAT: FREE";
@@ -200,6 +228,45 @@ void Analysis::updateBeatFactor() {
       lockOnFactor = 1.0;
       lockOnIntensity = 0;
       lockOnBand = -1;
+    }
+  }
+}
+
+
+
+void Analysis::updateTriSpectrum(const double *fftData) {
+  std::memset(barkBands, 0, BARK_BANDS.size() * sizeof(double));
+
+  for (int i = 0; i < fftSize / 2; i++) {
+    barkBands[barkTable[i]] += fftData[i] / (fftSize / 2);
+  }
+
+  double tri[3] = {0.0, 0.0, 0.0};
+  for (int i = 0; i < BARK_BANDS.size(); i++) {
+    tri[i * 3 / BARK_BANDS.size()] += barkBands[i] * barkBands[i];
+    //tri[i * 3 / BARK_BANDS.size()] += std::max(0.0, 50 + 60 * log10(barkBands[i] / 120));
+  }
+
+  double avg[3] = {0.0, 0.0, 0.0};
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < PEAK_HISTORY_SIZE - 1; j++) {
+      triSpectrumHistory[i][j] = triSpectrumHistory[i][j + 1];
+      avg[i] += triSpectrumHistory[i][j] / PEAK_HISTORY_SIZE;
+    }
+    triSpectrumHistory[i][PEAK_HISTORY_SIZE - 1] = sqrt(tri[i]);
+    avg[i] += sqrt(tri[i]) / PEAK_HISTORY_SIZE;
+  }
+
+  // normalize
+  double max = std::max(avg[0], std::max(avg[1], avg[2]));
+  if (max > 0) {
+    for (int i = 0; i < 3; i++) {
+      avg[i] /= max;
+      triSpectrum[i] = avg[i];
+    }
+  } else {
+    for (int i = 0; i < 3; i++) {
+      triSpectrum[i] = 0.0;
     }
   }
 }
@@ -237,6 +304,10 @@ const double *Analysis::getBeatBandsFactor() const {
   return beatBandsFactor;
 }
 
+const double *Analysis::getTriSpectrum() const {
+  return triSpectrum;
+}
+
 int Analysis::getBeatLockOnBand() const {
   return lockOnBand;
 }
@@ -249,7 +320,5 @@ void Analysis::debugPrint()
   }
   printf("\n");
 }
-
-constexpr std::array<int, 5> Analysis::BEAT_BANDS;
 
 #include "analysis.moc"

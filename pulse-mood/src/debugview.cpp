@@ -41,6 +41,7 @@ void DebugView::paintEvent(QPaintEvent *event)
   const double *bands = analysis->getBands();
   const double *beatBandAverage = analysis->getBeatBandsAverage();
   const double *beatBandsFactor = analysis->getBeatBandsFactor();
+  const double *triSpectrum = analysis->getTriSpectrum();
   double maxBeatFactor = analysis->getBeatFactor();
   int lockOnBand = analysis->getBeatLockOnBand();
   double peak = analysis->getSmoothPeak();
@@ -84,6 +85,15 @@ void DebugView::paintEvent(QPaintEvent *event)
   }
   painter.fillRect(200 - maxBeatFactor * 30, 270 + 15 * Analysis::BEAT_BANDS.size(), maxBeatFactor * 60, 10, Qt::darkYellow);
   painter.drawText(200, 280 + 15 * Analysis::BEAT_BANDS.size(), lockOnBand < 0 ? "-" : QString::number(Analysis::BEAT_BANDS[lockOnBand]));
+
+  QColor triColor[] = {Qt::red, Qt::green, Qt::blue};
+  for (int i = 0; i < 3; i++) {
+    painter.fillRect(i * 20 + 5, 470 - triSpectrum[i] * 100, 10, triSpectrum[i] * 100, triColor[i]);
+  }
+  QColor finalColor((int) (255 *triSpectrum[0]),
+                    (int) (255 *triSpectrum[1]),
+                    (int) (255 *triSpectrum[2]));
+  painter.fillRect(5, 475, 55, 20, finalColor);
 
 //  if (beatFactor > 1.3)
 //    painter.fillRect(200 - beatFactor * 30, 270, beatFactor * 60, 10, Qt::green);

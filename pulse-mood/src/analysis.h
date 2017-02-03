@@ -33,12 +33,14 @@
 
 // how many samples to keep for sliding window
 // for smoothing (average) or derivative
-#define PEAK_HISTORY_SIZE  25               // about 500ms
-#define PEAK_HISTORY_LOCAL  4               // about  80ms
+#define PEAK_HISTORY_SIZE   50              // about 500ms
+#define PEAK_HISTORY_LOCAL   4              // about  80ms
 #define BEAT_HISTORY_SIZE   10              // about 200ms
-#define BEAT_HISTORY_LOCAL  1               // about  20ms
+#define BEAT_HISTORY_LOCAL   1              // about  20ms
 
-#define BEAT_THRESHOLD      1.4
+#define SAMPLE_RATE      48000
+
+//#define BEAT_THRESHOLD      1.4
 
 class Analysis : public QObject
 {
@@ -53,6 +55,7 @@ class Analysis : public QObject
     const double* getBands() const;
     const double* getBeatBandsAverage() const;
     const double* getBeatBandsFactor() const;
+    const double* getTriSpectrum() const;
     double getPeak() const;
     double getSmoothPeak() const;
     double getAveragePeak() const;
@@ -61,7 +64,14 @@ class Analysis : public QObject
     
     void debugPrint();
 
+    constexpr static std::array<int, 24> BARK_BANDS = {
+       100,  200,  300,  400,  510,  630,
+       770,  920, 1080, 1270, 1480, 1720,
+      2000, 2320, 2700, 3150, 3700, 4400,
+      5300, 6400, 7700, 9500, 12000, 15500
+    };
     constexpr static std::array<int, 5> BEAT_BANDS = {3, 4, 5, 6, 7};
+    constexpr static std::array<double, 5> BEAT_THRESHOLD = {1.4, 1.4, 1.4, 1.5, 1.8};
     
   private:
     //QMutex mutex;
@@ -75,6 +85,7 @@ class Analysis : public QObject
     
     float *logScale;
     double *bands;
+    int *barkTable;
     
     double peak;
     double peakHistory[PEAK_HISTORY_SIZE];
@@ -82,15 +93,21 @@ class Analysis : public QObject
     double beatAverage[BEAT_BANDS.size()];
     double beatBandsFactor[BEAT_BANDS.size()];
     double averagePeak;
-    double smoothPeak;
 
+    double smoothPeak;
     double beatFactor;
+
+    double barkBands[BARK_BANDS.size()];
+    double triSpectrumHistory[3][PEAK_HISTORY_SIZE];
+    double triSpectrum[3];
+
     int lockOnBand;
     double lockOnFactor;
     double lockOnIntensity;
 
     void updateBands(const double* fftData);
     void updateBeatFactor();
+    void updateTriSpectrum(const double* fftData);
 };
 
 #endif // ANALYSIS_H
