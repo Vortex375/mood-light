@@ -35,7 +35,7 @@
 // for smoothing (average) or derivative
 #define PEAK_HISTORY_SIZE   50              // about 500ms
 #define PEAK_HISTORY_LOCAL   4              // about  80ms
-#define BEAT_HISTORY_SIZE   10              // about 200ms
+#define BEAT_HISTORY_SIZE    4              // about 200ms
 #define BEAT_HISTORY_LOCAL   1              // about  20ms
 
 #define SAMPLE_RATE      48000

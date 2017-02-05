@@ -104,7 +104,8 @@ int main(int argc, char **argv) {
         int h,s,v;
         baseColor.getHsv(&h, &s, &v);
 //        double factor = analysis.getAveragePeak() * 0.8 * (1 + pow(analysis.getBeatFactor() - 1, 0.5) / 2);
-        double factor = analysis.getAveragePeak() * 0.8 * (0.5 + analysis.getBeatFactor() / 2);
+//        double factor = analysis.getAveragePeak() * 0.8 * (0.5 + analysis.getBeatFactor() / 2);
+        double factor = analysis.getAveragePeak() * 0.8 * analysis.getBeatFactor();
         v = std::max(0, std::min(255, (int) (v * factor)));
         QColor currentColor = QColor::fromHsv(h, s, v);
         //qDebug() << "H:" << h << "S:" << s << "V:" << v;
