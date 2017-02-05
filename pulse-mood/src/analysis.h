@@ -35,7 +35,7 @@
 // for smoothing (average) or derivative
 #define PEAK_HISTORY_SIZE   50              // about 500ms
 #define PEAK_HISTORY_LOCAL   4              // about  80ms
-#define BEAT_HISTORY_SIZE    4              // about 200ms
+#define BEAT_HISTORY_SIZE    4             // about  80ms
 #define BEAT_HISTORY_LOCAL   1              // about  20ms
 
 #define SAMPLE_RATE      48000
@@ -47,7 +47,7 @@ class Analysis : public QObject
   Q_OBJECT
   
   public:
-    Analysis(QObject *parent, const int fftSize, const int nBands);
+    Analysis(QObject *parent, const int fftSize);
     ~Analysis();
 
     void update(const double *audioData);
@@ -64,14 +64,16 @@ class Analysis : public QObject
     
     void debugPrint();
 
+    /* "critical frequencies (cutoff) of the Bark Scale */
     constexpr static std::array<int, 24> BARK_BANDS = {
-       100,  200,  300,  400,  510,  630,
-       770,  920, 1080, 1270, 1480, 1720,
-      2000, 2320, 2700, 3150, 3700, 4400,
+       100,  200,  300,  400,   510,   630,
+       770,  920, 1080, 1270,  1480,  1720,
+      2000, 2320, 2700, 3150,  3700,  4400,
       5300, 6400, 7700, 9500, 12000, 15500
     };
-    constexpr static std::array<int, 5> BEAT_BANDS = {3, 4, 5, 6, 7};
-    constexpr static std::array<double, 5> BEAT_THRESHOLD = {1.4, 1.4, 1.4, 1.5, 1.8};
+    constexpr static std::array<int, 5> BEAT_BANDS = {0, 1, 2, 3, 4};
+    constexpr static std::array<double, 5> BEAT_THRESHOLD = {1.3, 1.3, 1.3, 1.3, 1.3};
+    constexpr static size_t N_BANDS = BARK_BANDS.size(); // 24
     
   private:
     //QMutex mutex;
@@ -81,11 +83,9 @@ class Analysis : public QObject
     QTime debugTime;
 
     const int fftSize;
-    const int nBands;
-    
-    float *logScale;
-    double *bands;
+
     int *barkTable;
+    double bands[BARK_BANDS.size()];
     
     double peak;
     double peakHistory[PEAK_HISTORY_SIZE];
@@ -97,7 +97,6 @@ class Analysis : public QObject
     double smoothPeak;
     double beatFactor;
 
-    double barkBands[BARK_BANDS.size()];
     double triSpectrumHistory[3][PEAK_HISTORY_SIZE];
     double triSpectrum[3];
 

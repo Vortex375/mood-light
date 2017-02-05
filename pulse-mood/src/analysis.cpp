@@ -33,25 +33,17 @@ constexpr std::array<int, 5> Analysis::BEAT_BANDS;
 constexpr std::array<double, 5> Analysis::BEAT_THRESHOLD;
 constexpr std::array<int, 24> Analysis::BARK_BANDS;
 
-Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
+Analysis::Analysis(QObject* parent, const int fftSize) :
   QObject(parent),
   fft(fftSize),
   beatFFT(PEAK_HISTORY_SIZE),
-  fftSize(fftSize),
-  nBands(nBands)
+  fftSize(fftSize)
 {
-  bands = new double[nBands];
-  logScale = new float[nBands + 1];
   barkTable = new int[fftSize / 2];
-  
-  // initialize logarithmic scale
-  for (int i = 0; i <= nBands; i++) {
-    logScale[i] = pow(fftSize / 2, (float) i / nBands) - 0.5;
-  }
 
   // initialize bark table
   int barkBand = 0;
-  for (int i = 0; i < fftSize / 2; i++) {
+  for (int i = 1; i < fftSize / 2; i++) {
     double freq = (double) SAMPLE_RATE / fftSize * i;
     while (barkBand < BARK_BANDS.size() - 1 && freq >= BARK_BANDS[barkBand]) {
       barkBand++;
@@ -59,11 +51,7 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
     qDebug() << SAMPLE_RATE << "/" << fftSize << "*" <<i << "=" << freq << "->" << barkBand;
     barkTable[i] = barkBand;
   }
-  
-  qDebug() << "LOG SCALE:";
-  for (int i = 0; i <= nBands; i++) {
-    printf("%f ", logScale[i]);
-  }
+
   printf("\n");
   qDebug() << "BARK TABLE:";
   for (int i = 0; i < fftSize / 2; i++) {
@@ -72,7 +60,6 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
   printf("\n");
   
   // initialize bands
-  std::memset(bands, 0, nBands * sizeof(double));
   std::memset(beatBandsFactor, 0, BEAT_BANDS.size() * sizeof(double));
   std::memset(triSpectrumHistory, 0, 3 * PEAK_HISTORY_SIZE * sizeof(double));
   beatFactor = 1.0;
@@ -83,8 +70,7 @@ Analysis::Analysis(QObject* parent, const int fftSize, const int nBands) :
 
 Analysis::~Analysis()
 {
-  delete[] bands;
-  delete[] logScale;
+  delete[] barkTable;
 }
 
 void Analysis::update(const double *audioData)
@@ -122,34 +108,11 @@ void Analysis::updatePeak(const double peak_)
 
 void Analysis::updateBands(const double* fftData)
 {
-  //QMutexLocker(&mutex);
-
-  for (int i = 0; i < nBands; i++) {
-    int a = ceil(logScale[i]);
-    int b = floor(logScale[i+1]);
-    double n = 0; // accumulator
-    double x = 0;
-
-    if (b < a) {
-      n += fftData[b] * (logScale[i + 1] - logScale[i]);
-    } else {
-      if (a > 1) {
-        n += fftData[a - 1] * (a - logScale[i]);
-      }
-      while (a < b) {
-        n += fftData[a];
-        a++;
-      }
-      if (b < fftSize / 2) {
-        n += fftData[b] * (logScale[i + 1] - b);
-      }
-    }
-
-    x = 50 + 60 * log10(n / 120);
-    bands[i] = std::max(0.0, std::min(x, 250.0));
+  std::memset(bands, 0, N_BANDS * sizeof(double));
+  for (int i = 1; i < fftSize / 2; i++) {
+    bands[barkTable[i]] += fftData[i] / (fftSize / 2);
   }
 
-  //beatFactor = 1.0;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
     double avg = 0.0;
     double localAvg = 0.0;
@@ -160,7 +123,8 @@ void Analysis::updateBands(const double* fftData)
         localAvg += beatHistory[i][j] / BEAT_HISTORY_LOCAL;
       }
     }
-    beatHistory[i][BEAT_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]] / 100, 2);
+//    beatHistory[i][BEAT_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]], 2);
+    beatHistory[i][BEAT_HISTORY_SIZE - 1] = bands[BEAT_BANDS[i]];
     avg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_SIZE;
     localAvg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
     beatAverage[i] = avg;
@@ -188,7 +152,7 @@ void Analysis::updateBeatFactor() {
   int newBand = -1;
   double newFactor = 0.0;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
-    if (beatBandsFactor[i] - BEAT_THRESHOLD[i] > newFactor + (0.02/(beatAverage[i]*beatAverage[i]))) {
+    if (beatBandsFactor[i] - BEAT_THRESHOLD[i] > newFactor + (0.01/(beatAverage[i]*beatAverage[i]))) {
       newFactor = beatBandsFactor[i] - 1;
       newBand = i;
     }
@@ -206,7 +170,7 @@ void Analysis::updateBeatFactor() {
           && newFactor > beatFactor) { // switch band
     beatFactor = newFactor;
     lockOnFactor = newFactor;
-    lockOnIntensity = bands[BEAT_BANDS[newBand]];;
+    lockOnIntensity = bands[BEAT_BANDS[newBand]];
     lockOnBand = newBand;
     qDebug() << "BEAT: SWITCH" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t"
              << beatFactor;
@@ -220,7 +184,7 @@ void Analysis::updateBeatFactor() {
     qDebug() << "BEAT: REFILL" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
   } else if (lockOnBand >= 0) { // decay
     qDebug() << "BEAT: DECAY" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
-    beatFactor = beatFactor - (beatFactor - 1) / 6;
+    beatFactor = beatFactor * 0.8;
     lockOnIntensity = lockOnIntensity * 0.98;
     if (beatFactor < 1.01) {
       qDebug() << "BEAT: FREE";
@@ -235,15 +199,17 @@ void Analysis::updateBeatFactor() {
 
 
 void Analysis::updateTriSpectrum(const double *fftData) {
-  std::memset(barkBands, 0, BARK_BANDS.size() * sizeof(double));
-
-  for (int i = 0; i < fftSize / 2; i++) {
-    barkBands[barkTable[i]] += fftData[i] / (fftSize / 2);
-  }
 
   double tri[3] = {0.0, 0.0, 0.0};
   for (int i = 0; i < BARK_BANDS.size(); i++) {
-    tri[i * 3 / BARK_BANDS.size()] += barkBands[i] * barkBands[i];
+    if (i < 5) {
+      tri[0] += bands[i] * bands[i];
+    } else if (i < 18) {
+      tri[1] += bands[i] * bands[i];
+    } else {
+      tri[2] += bands[i] * bands[i];
+    }
+
     //tri[i * 3 / BARK_BANDS.size()] += std::max(0.0, 50 + 60 * log10(barkBands[i] / 120));
   }
 
@@ -288,7 +254,7 @@ double Analysis::getAveragePeak() const
 
 double Analysis::getBeatFactor() const
 {
-  return 1 + (beatFactor - 1) * pow((lockOnIntensity) / 100, 2);
+  return 1 + (beatFactor - 1) * lockOnIntensity;
 }
 
 const double * Analysis::getBands() const
@@ -315,7 +281,7 @@ int Analysis::getBeatLockOnBand() const {
 void Analysis::debugPrint()
 {
   printf("BANDS:\n");
-  for (int i = 0; i < nBands; i++) {
+  for (int i = 0; i < N_BANDS; i++) {
     printf("%.2f ", bands[i]);
   }
   printf("\n");

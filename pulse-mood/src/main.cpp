@@ -48,7 +48,6 @@ void signal_callback_handler(int signum) {
 
 #define FRAME_SIZE      2048
 #define FRAME_DURATION    20 // 50 FPS
-#define ANALYSIS_BANDS    20
 
 int main(int argc, char **argv) {
     // register signal traps
@@ -69,8 +68,8 @@ int main(int argc, char **argv) {
 
     Serial serial(&app);
     PulseAudio pulseAudio(&app, FRAME_SIZE);
-    Analysis analysis(&app, FRAME_SIZE, ANALYSIS_BANDS);
-    DebugView debugView(&analysis, ANALYSIS_BANDS);
+    Analysis analysis(&app, FRAME_SIZE);
+    DebugView debugView(&analysis);
 
 //    QColor baseColor(255, 180, 107);    // warm white
 //    QColor baseColor(103,58,183);         // deep purple
@@ -92,7 +91,7 @@ int main(int argc, char **argv) {
         //const double* bands = analysis.getBands();
 
         //printf("BEAT: %f\n", analysis.getBeatFactor());
-        //analysis.debugPrint();
+//        analysis.debugPrint();
         debugView.update();
 
         const double *triSpectrum = analysis.getTriSpectrum();

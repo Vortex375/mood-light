@@ -24,6 +24,7 @@
 #define DEBUGVIEW_H
 
 #include <QWidget>
+#include <QTime>
 
 #include "analysis.h"
 
@@ -32,7 +33,7 @@ class DebugView : public QWidget
     Q_OBJECT
     
   public:
-    DebugView(const Analysis* analysis, const size_t nBands);
+    DebugView(const Analysis* analysis);
     ~DebugView();
     
   protected:
@@ -41,7 +42,7 @@ class DebugView : public QWidget
 
   private:
     const Analysis *analysis;
-    const size_t nBands;
+    QTime lastRedraw;
 };
 
 #endif // DEBUGVIEW_H

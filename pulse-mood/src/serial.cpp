@@ -45,6 +45,9 @@ Serial::~Serial()
 
 void Serial::writePixelValue(uint32_t pixel)
 {
+    if (!port.isOpen()) {
+        return;
+    }
     if (port.bytesToWrite() > 0) {
         // do not queue
         return;
