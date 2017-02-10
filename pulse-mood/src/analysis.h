@@ -72,9 +72,9 @@ class Analysis : public QObject
       5300, 6400, 7700, 9500, 12000, 15500
     };
     constexpr static std::array<int, 5> BEAT_BANDS = {0, 1, 2, 3, 4};
-    constexpr static std::array<double, 5> BEAT_THRESHOLD = {1.3, 1.3, 1.3, 1.3, 1.3};
+    constexpr static std::array<double, 5> BEAT_THRESHOLD = {1.5, 1.5, 1.5, 1.5, 1.5};
     constexpr static size_t N_BANDS = BARK_BANDS.size(); // 24
-    
+
   private:
     //QMutex mutex;
 
@@ -91,6 +91,7 @@ class Analysis : public QObject
     double peakHistory[PEAK_HISTORY_SIZE];
     double beatHistory[BEAT_BANDS.size()][BEAT_HISTORY_SIZE];
     double beatAverage[BEAT_BANDS.size()];
+    double beatVariance[BEAT_BANDS.size()];
     double beatBandsFactor[BEAT_BANDS.size()];
     double averagePeak;
 

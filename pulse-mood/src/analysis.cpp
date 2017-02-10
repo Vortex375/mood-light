@@ -33,6 +33,19 @@ constexpr std::array<int, 5> Analysis::BEAT_BANDS;
 constexpr std::array<double, 5> Analysis::BEAT_THRESHOLD;
 constexpr std::array<int, 24> Analysis::BARK_BANDS;
 
+#define RED   "\x1B[31m"
+#define GRN   "\x1B[32m"
+#define YEL   "\x1B[33m"
+#define BLU   "\x1B[34m"
+#define MAG   "\x1B[35m"
+#define CYN   "\x1B[36m"
+#define WHT   "\x1B[37m"
+#define RESET "\x1B[0m"
+void beatPrint(const char* color, const char* type, int band, double intensity, double variance, double factor) {
+  printf("%sBEAT: %s\tBAND: %d    LOCK: %.5f    VAR: %.5f    FACT: %.5f    RES: %.5f\n",
+         color, type, band, intensity, variance, factor, 1 + (factor - 1) * intensity);
+}
+
 Analysis::Analysis(QObject* parent, const int fftSize) :
   QObject(parent),
   fft(fftSize),
@@ -116,6 +129,8 @@ void Analysis::updateBands(const double* fftData)
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
     double avg = 0.0;
     double localAvg = 0.0;
+    double var = 0.0;
+
     for (int j = 0; j < BEAT_HISTORY_SIZE - 1; j++) {
       beatHistory[i][j] = beatHistory[i][j+1];
       avg += beatHistory[i][j] / BEAT_HISTORY_SIZE;
@@ -123,16 +138,17 @@ void Analysis::updateBands(const double* fftData)
         localAvg += beatHistory[i][j] / BEAT_HISTORY_LOCAL;
       }
     }
-//    beatHistory[i][BEAT_HISTORY_SIZE - 1] = pow(bands[BEAT_BANDS[i]], 2);
+
     beatHistory[i][BEAT_HISTORY_SIZE - 1] = bands[BEAT_BANDS[i]];
-    avg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_SIZE;
-    localAvg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
+    avg += bands[BEAT_BANDS[i]] / BEAT_HISTORY_SIZE;
+    localAvg += bands[BEAT_BANDS[i]] / BEAT_HISTORY_LOCAL;
     beatAverage[i] = avg;
-    /*if (avg > 0.2 || localAvg > 0.2) { // mask small local maxima
-      beatBandsFactor[i] = (beatBandsFactor[i] + std::max(1.0, localAvg / avg)) / 2;
-    } else {
-      beatBandsFactor[i] = 1.0;
-    }*/
+
+    for (int j = 0; j < BEAT_HISTORY_SIZE; j++) {
+      var += pow(avg - beatHistory[i][j], 2);
+    }
+    beatVariance[i] = var;
+
     if (avg > 0.2 || localAvg > 0.2) {
       beatBandsFactor[i] = std::max(1.0, localAvg / avg);
     } else {
@@ -150,21 +166,20 @@ void Analysis::updateBands(const double* fftData)
 
 void Analysis::updateBeatFactor() {
   int newBand = -1;
-  double newFactor = 0.0;
+  double newFactor = 1.0;
   for (int i = 0; i < BEAT_BANDS.size(); i++) {
-    if (beatBandsFactor[i] - BEAT_THRESHOLD[i] > newFactor + (0.01/(beatAverage[i]*beatAverage[i]))) {
+    if (beatBandsFactor[i] - BEAT_THRESHOLD[i] > newFactor) {
       newFactor = beatBandsFactor[i] - 1;
       newBand = i;
     }
   }
-  newFactor += 1;
 
   if (lockOnBand < 0 && newBand >= 0) { // new
     beatFactor = newFactor;
     lockOnFactor = newFactor;
     lockOnIntensity = bands[BEAT_BANDS[newBand]];
     lockOnBand = newBand;
-    qDebug() << "BEAT: NEW" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
+    beatPrint(RED, "NEW", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
   } else if (newBand >= 0
           && bands[BEAT_BANDS[newBand]] > lockOnIntensity * 1.1
           && newFactor > beatFactor) { // switch band
@@ -172,8 +187,7 @@ void Analysis::updateBeatFactor() {
     lockOnFactor = newFactor;
     lockOnIntensity = bands[BEAT_BANDS[newBand]];
     lockOnBand = newBand;
-    qDebug() << "BEAT: SWITCH" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t"
-             << beatFactor;
+    beatPrint(YEL, "SWITCH", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
   } else if (newBand >= 0 && newBand == lockOnBand
           && newFactor > beatFactor
           //&& newFactor > lockOnFactor * 0.9
@@ -181,13 +195,13 @@ void Analysis::updateBeatFactor() {
     beatFactor = newFactor;
     if (newFactor > lockOnFactor) lockOnFactor = newFactor;
     lockOnIntensity = bands[BEAT_BANDS[newBand]];
-    qDebug() << "BEAT: REFILL" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
+    beatPrint(CYN, "REFILL", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
   } else if (lockOnBand >= 0) { // decay
-    qDebug() << "BEAT: DECAY" << "\t" << "BAND:" << BEAT_BANDS[lockOnBand] << "LOCK:" << lockOnIntensity << "\t" << beatFactor;
-    beatFactor = beatFactor * 0.8;
-    lockOnIntensity = lockOnIntensity * 0.98;
+//    beatPrint(BLU, "DECAY", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
+    beatFactor = beatFactor * 0.9;
+    lockOnIntensity = lockOnIntensity * 0.9;
     if (beatFactor < 1.01) {
-      qDebug() << "BEAT: FREE";
+//      beatPrint(GRN, "FREE", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
       beatFactor = 1.0;
       lockOnFactor = 1.0;
       lockOnIntensity = 0;
@@ -195,8 +209,6 @@ void Analysis::updateBeatFactor() {
     }
   }
 }
-
-
 
 void Analysis::updateTriSpectrum(const double *fftData) {
 

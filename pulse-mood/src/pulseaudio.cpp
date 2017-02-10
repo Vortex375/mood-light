@@ -182,7 +182,7 @@ void PulseAudio::paStateCallback(pa_context* context, void* userdata)
       // so we can move it to our streaming sink while streaming is active)
       //pa_context_set_subscribe_callback(that->paContext, PAHelper::paContextSubscribeCallback, that);
       //pa_context_subscribe(that->paContext, PA_SUBSCRIPTION_MASK_ALL, NULL, NULL);
-      
+
       that->startRecording();
       break;
     case PA_CONTEXT_FAILED:
@@ -216,16 +216,16 @@ void PulseAudio::paStreamCallback(pa_stream* stream, void* userdata)
       break;
     case PA_STREAM_FAILED:
       qWarning() << "Record Stream failed.";
-      that-> recording = false;
+      that->recording = false;
       break;
     case PA_STREAM_TERMINATED:
       qWarning() << "Record Stream closed.";
-      that-> recording = false;
+      that->recording = false;
       break;
   }
 }
 
-const double * PulseAudio::getData() const
+const double* PulseAudio::getData() const
 {
   return buffer;
 }
