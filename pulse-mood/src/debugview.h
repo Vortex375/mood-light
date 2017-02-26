@@ -25,6 +25,7 @@
 
 #include <QWidget>
 #include <QTime>
+#include <QSlider>
 
 #include "analysis.h"
 
@@ -35,6 +36,8 @@ class DebugView : public QWidget
   public:
     DebugView(const Analysis* analysis);
     ~DebugView();
+
+    double getMaxIntensity();
     
   protected:
     void paintEvent(QPaintEvent *event);
@@ -43,6 +46,8 @@ class DebugView : public QWidget
   private:
     const Analysis *analysis;
     QTime lastRedraw;
+
+    QSlider intensitySlider;
 };
 
 #endif // DEBUGVIEW_H

@@ -9,7 +9,7 @@
 #define SERIAL_BAUD_RATE 19200
 
 #define PIN           6
-#define NUMPIXELS     24
+#define NUMPIXELS     240
 
 #define BLACK         pixels.Color(0, 0, 0)
 #define WHITE         pixels.Color(255, 255, 255)
@@ -28,9 +28,9 @@ pixel_t colorBuffer[NUMPIXELS];
 
 void patternSingle(uint32_t color) {
   uint8_t *c = (uint8_t*) &color;
-  colorBuffer[0].r = c[2];
-  colorBuffer[0].g = c[1];
-  colorBuffer[0].b = c[0];
+  colorBuffer[0].r = c[3];
+  colorBuffer[0].g = c[2];
+  colorBuffer[0].b = c[1];
   memcpy(colorBuffer+1, colorBuffer, sizeof(colorBuffer) - sizeof(pixel_t));
 }
 
@@ -87,6 +87,22 @@ void rotate(bool right) {
   pixels.show();
 }
 
+void synchronizeSerial() {
+  unsigned char input[3];
+  while(true) {
+    while(Serial.read() != 0) {
+      ;
+    }
+    while(Serial.readBytes(input, 3) != 3) {
+      ;
+    }
+    
+    if (input[0] == 0x55 && input[1] == 0xAA && input[2] == 0xFF) {
+      return;
+    }
+  }
+}
+
 void setup() {
   pixels.begin(); // This initializes the NeoPixel library.
 
@@ -95,22 +111,19 @@ void setup() {
     ; // wait for serial port to connect. Needed for native USB port only
   }
 
-  //synchronize on 0
-  while(Serial.read() != 0) {
-    ;
-  }
-
   patternSingle(BLACK);
   applyInstant();
 }
 
 void loop() {
-  if (Serial.available() >= sizeof(uint32_t)) {
-    uint32_t color;
-    Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
-    patternSingle(color);
-    applyInstant();
+  synchronizeSerial();
+  while(Serial.available() < sizeof(uint32_t)) {
+    ;
   }
+  uint32_t color;
+  Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
+  patternSingle(color);
+  applyInstant();
   
   
 //  patternSingle(BLACK);

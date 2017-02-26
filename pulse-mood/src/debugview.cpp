@@ -25,9 +25,13 @@
 #include <QPainter>
 
 DebugView::DebugView(const Analysis * analysis) : QWidget(),
-  analysis(analysis)
+  analysis(analysis),
+  intensitySlider(Qt::Horizontal, this)
 {
   setFixedSize(QSize(500, 500));
+  intensitySlider.setRange(0, 100);
+  intensitySlider.setValue(20);
+  intensitySlider.setGeometry(400, 485, 100, 15);
 }
 
 DebugView::~DebugView()
@@ -38,7 +42,7 @@ DebugView::~DebugView()
 void DebugView::paintEvent(QPaintEvent *event)
 {
   int fps = 0;
-  if (lastRedraw.isValid()) {
+  if (lastRedraw.isValid() && lastRedraw.elapsed() > 0) {
     fps = 1000 / lastRedraw.elapsed();
   }
   lastRedraw.start();
@@ -106,4 +110,10 @@ void DebugView::paintEvent(QPaintEvent *event)
   
   painter.setPen(Qt::red);
   painter.drawLine(0, 250, 400, 250);
+
+  painter.end();
+}
+
+double DebugView::getMaxIntensity() {
+  return (double) intensitySlider.value() / 100;
 }

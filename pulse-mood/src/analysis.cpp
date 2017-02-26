@@ -132,16 +132,16 @@ void Analysis::updateBands(const double* fftData)
     double var = 0.0;
 
     for (int j = 0; j < BEAT_HISTORY_SIZE - 1; j++) {
-      beatHistory[i][j] = beatHistory[i][j+1];
       avg += beatHistory[i][j] / BEAT_HISTORY_SIZE;
+      beatHistory[i][j] = beatHistory[i][j+1];
       if (j >= BEAT_HISTORY_SIZE - BEAT_HISTORY_LOCAL) {
         localAvg += beatHistory[i][j] / BEAT_HISTORY_LOCAL;
       }
     }
-
     beatHistory[i][BEAT_HISTORY_SIZE - 1] = bands[BEAT_BANDS[i]];
-    avg += bands[BEAT_BANDS[i]] / BEAT_HISTORY_SIZE;
-    localAvg += bands[BEAT_BANDS[i]] / BEAT_HISTORY_LOCAL;
+
+    avg += beatHistory[i][BEAT_HISTORY_SIZE - 2] / BEAT_HISTORY_SIZE;
+    localAvg += beatHistory[i][BEAT_HISTORY_SIZE - 1] / BEAT_HISTORY_LOCAL;
     beatAverage[i] = avg;
 
     for (int j = 0; j < BEAT_HISTORY_SIZE; j++) {
@@ -149,7 +149,7 @@ void Analysis::updateBands(const double* fftData)
     }
     beatVariance[i] = var;
 
-    if (avg > 0.2 || localAvg > 0.2) {
+    if (avg > 0.2 || (avg > 0 && localAvg > 0.2)) {
       beatBandsFactor[i] = std::max(1.0, localAvg / avg);
     } else {
       beatBandsFactor[i] = 1.0;
@@ -198,8 +198,8 @@ void Analysis::updateBeatFactor() {
     beatPrint(CYN, "REFILL", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
   } else if (lockOnBand >= 0) { // decay
 //    beatPrint(BLU, "DECAY", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
-    beatFactor = beatFactor * 0.9;
-    lockOnIntensity = lockOnIntensity * 0.9;
+    beatFactor = beatFactor * 0.85;
+    lockOnIntensity = lockOnIntensity * 0.85;
     if (beatFactor < 1.01) {
 //      beatPrint(GRN, "FREE", BEAT_BANDS[lockOnBand], lockOnIntensity, beatVariance[lockOnBand], beatFactor);
       beatFactor = 1.0;
@@ -234,6 +234,9 @@ void Analysis::updateTriSpectrum(const double *fftData) {
     triSpectrumHistory[i][PEAK_HISTORY_SIZE - 1] = sqrt(tri[i]);
     avg[i] += sqrt(tri[i]) / PEAK_HISTORY_SIZE;
   }
+
+  // apply beat
+  avg[0] *= getBeatFactor();
 
   // normalize
   double max = std::max(avg[0], std::max(avg[1], avg[2]));

@@ -20,31 +20,41 @@
  * 
  */
 
-#ifndef SERIAL_H
-#define SERIAL_H
+#include "serial.h"
 
-#include <QObject>
-#include <QSerialPort>
+#include <QDebug>
+#include <QtSerialPort/QSerialPortInfo>
 
-#include <stdint.h>
+constexpr uint8_t Serial::syncHeader[];
 
-#define BAUD_RATE 19200
-
-class Serial : public QObject
+Serial::Serial(QObject *parent) :
+        port(this)
 {
-Q_OBJECT
+  qDebug() << "available serial ports:";
+          foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
+      qDebug() << "Opening serial port:" << info.portName();
+      port.setPort(info);
+      break;
+    }
 
-public:
-    Serial(QObject *parent);
-    ~Serial();
+  port.setBaudRate(BAUD_RATE);
+  port.open(QIODevice::WriteOnly);
+}
 
-    void writePixelValue(uint32_t pixel);
+Serial::~Serial()
+{
+}
 
+void Serial::writePixelValue(uint32_t pixel)
+{
+  if (!port.isOpen()) {
+    return;
+  }
 
-private:
-    QSerialPort port;
+  const uint8_t *data = (const uint8_t *) &pixel;
 
-    constexpr static uint8_t syncHeader[] = {0x00, 0x55, 0xAA, 0xFF};
-};
+  port.write((const char *) syncHeader, 4);
 
-#endif // SERIAL_H
+  port.write((const char *) &pixel, sizeof(pixel));
+  qDebug() << "Serial: wrote" << syncHeader[0] << syncHeader[1] << syncHeader[2] << syncHeader[3] << data[0] << data[1] << data[2] << data[3];
+}

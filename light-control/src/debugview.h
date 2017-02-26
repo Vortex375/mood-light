@@ -20,31 +20,44 @@
  * 
  */
 
-#ifndef SERIAL_H
-#define SERIAL_H
+#ifndef DEBUGVIEW_H
+#define DEBUGVIEW_H
 
-#include <QObject>
-#include <QSerialPort>
+#include <QWidget>
+#include <QTime>
+#include <QSlider>
+#include <QLabel>
+#include <QPushButton>
 
-#include <stdint.h>
+#include "serial.h"
 
-#define BAUD_RATE 19200
-
-class Serial : public QObject
+class DebugView : public QWidget
 {
-Q_OBJECT
+    Q_OBJECT
+    
+  public:
+    DebugView(Serial* serial);
+    ~DebugView();
+  
 
-public:
-    Serial(QObject *parent);
-    ~Serial();
+  private:
+    Serial *serial;
 
-    void writePixelValue(uint32_t pixel);
+    QLabel labelR;
+    QLabel labelG;
+    QLabel labelB;
 
+    QSlider sliderR;
+    QSlider sliderG;
+    QSlider sliderB;
 
-private:
-    QSerialPort port;
+    QSlider sliderAll;
 
-    constexpr static uint8_t syncHeader[] = {0x00, 0x55, 0xAA, 0xFF};
+    QPushButton buttonSend;
+
+  private slots:
+    void updatePixelValue();
+    void setAll();
 };
 
-#endif // SERIAL_H
+#endif // DEBUGVIEW_H

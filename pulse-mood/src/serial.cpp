@@ -25,18 +25,20 @@
 #include <QDebug>
 #include <QtSerialPort/QSerialPortInfo>
 
+constexpr uint8_t Serial::syncHeader[];
+
 Serial::Serial(QObject *parent) :
-    port(this)
+        port(this)
 {
-    qDebug() << "available serial ports:";
-    foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
-        qDebug() << "Opening serial port:" << info.portName();
-        port.setPort(info);
-        break;
+  qDebug() << "available serial ports:";
+          foreach (const QSerialPortInfo &info, QSerialPortInfo::availablePorts()) {
+      qDebug() << "Opening serial port:" << info.portName();
+      port.setPort(info);
+      break;
     }
 
-    port.setBaudRate(BAUD_RATE);
-    port.open(QIODevice::WriteOnly);
+  port.setBaudRate(BAUD_RATE);
+  port.open(QIODevice::WriteOnly);
 }
 
 Serial::~Serial()
@@ -45,12 +47,14 @@ Serial::~Serial()
 
 void Serial::writePixelValue(uint32_t pixel)
 {
-    if (!port.isOpen()) {
-        return;
-    }
-    if (port.bytesToWrite() > 0) {
-        // do not queue
-        return;
-    }
-    port.write((const char *) &pixel, sizeof(pixel));
+  if (!port.isOpen()) {
+    return;
+  }
+  if (port.bytesToWrite() > 0) {
+    // do not queue
+    return;
+  }
+
+  port.write((const char *) syncHeader, 4);
+  port.write((const char *) &pixel, sizeof(pixel));
 }
