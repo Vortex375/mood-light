@@ -1,33 +1,43 @@
-#include <FastLED.h>
-#include <color.h>
+// NeoPixel Ring simple sketch (c) 2013 Shae Erisson
+// released under the GPLv3 license to match the rest of the AdaFruit NeoPixel library
+
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
 
 #define SERIAL_BAUD_RATE 19200
 
 #define PIN           6
 #define NUMPIXELS     240
 
-#define ROTARY_PIN_A  2
-#define ROTARY_PIN_B  4
-#define SWITCH_PIN    3
-
-#define BLACK         CRGB(0, 0, 0)
-#define WHITE         CRGB(255, 255, 255)
-#define WHITE_3000K   CRGB(255, 180, 107)
-#define WHITE_6500K   CRGB(255, 249, 253)
+#define BLACK         pixels.Color(0, 0, 0)
+#define WHITE         pixels.Color(255, 255, 255)
+#define WHITE_3000K   pixels.Color(255, 180, 107)
+#define WHITE_6500K   pixels.Color(255, 249, 253)
 
 #define DELAYVAL      250
-#define DELAYFADE     4
+#define DELAYFADE     2
 
-CRGB leds[NUMPIXELS];
-CRGB colorBuffer[NUMPIXELS];
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB | NEO_KHZ800);
 
-const CRGB PRESETS[] = {UncorrectedTemperature, Candle, Tungsten100W, HighNoonSun, ClearBlueSky, WarmFluorescent, CoolWhiteFluorescent, BlackLightFluorescent};
+// for direct pixel access in NEO_GRB mode
+typedef struct {uint8_t g; uint8_t r; uint8_t b;} pixel_t;
 
-volatile boolean interrupted;
-volatile int encoderChange;
-volatile boolean switchTriggered;
-uint8_t rotaryValue;
-int currentPreset;
+pixel_t colorBuffer[NUMPIXELS];
+
+void patternSingle(uint32_t color) {
+  uint8_t *c = (uint8_t*) &color;
+  colorBuffer[0].r = c[3];
+  colorBuffer[0].g = c[2];
+  colorBuffer[0].b = c[1];
+  memcpy(colorBuffer+1, colorBuffer, sizeof(colorBuffer) - sizeof(pixel_t));
+}
+
+void applyInstant() {
+  memcpy(pixels.getPixels(), colorBuffer, sizeof(colorBuffer));
+  pixels.show();
+}
 
 void fadeTo() {
   uint8_t *current;
@@ -35,11 +45,11 @@ void fadeTo() {
   boolean done;
   while (true) {
     done = true;
-    current = (uint8_t*) leds;
+    current = pixels.getPixels();
     target = (uint8_t*) colorBuffer;
     
     for (int j = 0; j < NUMPIXELS; j++) {
-      for (int i=0; i < sizeof(CRGB); i++) {
+      for (int i=0; i < sizeof(pixel_t); i++) {
         if (current[i] < target[i]) {
           current[i]++;
           done = false;
@@ -48,21 +58,21 @@ void fadeTo() {
           done = false;
         }
       }
-      current += sizeof(CRGB);
-      target += sizeof(CRGB);
+      current += sizeof(pixel_t);
+      target += sizeof(pixel_t);
     }
     if (done) {
       return;
     }
-    FastLED.show();
-    delay(DELAYFADE);
+    pixels.show();
+    //delay(DELAYFADE);
   }
 }
 
 void rotate(bool right) {
-  CRGB *pxValues = leds;
+  pixel_t *pxValues = (pixel_t*) pixels.getPixels();
   if (right) pxValues += NUMPIXELS - 1;
-  CRGB first = *pxValues;
+  pixel_t first = *pxValues;
   for (int i = 0; i < NUMPIXELS - 1; i++) {
     if (right) {
       pxValues[0] = pxValues[-1];
@@ -74,7 +84,7 @@ void rotate(bool right) {
   }
   pxValues[0] = first;
 
-  FastLED.show();
+  pixels.show();
 }
 
 void synchronizeSerial() {
@@ -84,89 +94,41 @@ void synchronizeSerial() {
       ;
     }
     while(Serial.readBytes(input, 3) != 3) {
+      //Serial.write("sync wait 2\n");
       ;
     }
     
     if (input[0] == 0x55 && input[1] == 0xAA && input[2] == 0xFF) {
+      //Serial.write("sync success\n");
       return;
     }
+    //Serial.write("sync fail\n");
   }
-}
-
-void doEncoder() {
-  if (digitalRead(ROTARY_PIN_A) == digitalRead(ROTARY_PIN_B)) {
-    encoderChange++;
-  } else {
-    encoderChange--;
-  }
-
-  interrupted = true;
-}
-
-void doSwitch() {
-  if (digitalRead(SWITCH_PIN) == HIGH) {
-    switchTriggered = true;
-  }
-
-  interrupted = true;
 }
 
 void setup() {
-  pinMode(ROTARY_PIN_A, INPUT_PULLUP);
-  pinMode(ROTARY_PIN_B, INPUT_PULLUP);
-  pinMode(SWITCH_PIN, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), doEncoder, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), doSwitch, CHANGE);
-
-  encoderChange = 0;
-  switchTriggered = false;
-  interrupted = false;
-  rotaryValue = 0;
-  currentPreset = 0;
-  
-  FastLED.addLeds<NEOPIXEL, PIN>(leds, NUMPIXELS);
+  pixels.begin(); // This initializes the NeoPixel library.
 
   Serial.begin(SERIAL_BAUD_RATE);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
 
-  FastLED.setCorrection(Typical8mmPixel);
-  FastLED.setTemperature(PRESETS[currentPreset]);
+  Serial.write("Ready\n");
 
-  FastLED.showColor(CRGB::Black);
+  patternSingle(BLACK);
+  applyInstant();
 }
 
 void loop() {
-  if (!interrupted) {
-    return;
+  synchronizeSerial();
+  while(Serial.available() < sizeof(uint32_t)) {
+    ;
   }
-  noInterrupts();
-
-  boolean turnOff = switchTriggered;
-  rotaryValue = constrain(rotaryValue + encoderChange * 2, 0, 255);
-  encoderChange = 0;
-  switchTriggered = false;
-  interrupted = false;
-  interrupts();
-
-  if (turnOff) {
-    currentPreset = (++currentPreset) % 8;
-  }
-  FastLED.setBrightness(rotaryValue);
-  FastLED.setTemperature(PRESETS[currentPreset]);
-  FastLED.showColor(CRGB::White);
-  
-//  synchronizeSerial();
-//  while(Serial.available() < sizeof(uint32_t)) {
-//    ;
-//  }
-//  uint32_t color;
-//  Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
-//  patternSingle(color);
-//  applyInstant();
-
+  uint32_t color;
+  Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
+  patternSingle(color);
+  fadeTo();
   
   
 //  patternSingle(BLACK);
