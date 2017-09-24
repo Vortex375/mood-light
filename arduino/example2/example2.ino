@@ -90,20 +90,41 @@ void rotate(bool right) {
 void synchronizeSerial() {
   unsigned char input[3];
   while(true) {
-    while(Serial.read() != 0) {
-      ;
+    Serial.write("try sync\n");
+    if (readByte() != 0) {
+      continue;
     }
-    while(Serial.readBytes(input, 3) != 3) {
-      //Serial.write("sync wait 2\n");
-      ;
+    if (readByte() != 0x55) {
+      continue;
     }
-    
-    if (input[0] == 0x55 && input[1] == 0xAA && input[2] == 0xFF) {
-      //Serial.write("sync success\n");
-      return;
+    if (readByte() != 0xAA) {
+      continue;
     }
-    //Serial.write("sync fail\n");
+    if (readByte() != 0xFF) {
+      continue;
+    }
+    Serial.write("sync success\n");
+    return;
   }
+}
+
+int readByte() {
+  int b;
+  while ((b = Serial.read()) < 0) {
+    ;
+  }
+  return b;
+}
+
+void debug(uint32_t color, boolean first) {
+  Serial.write(first ? "Read color: " : "Wrote color: ");
+  uint8_t* channel = (uint8_t*) &color;
+  for (int i = 0; i < sizeof(uint32_t); i++) {
+    Serial.print(*channel, DEC);
+    Serial.write(" ");
+    channel++;
+  }
+  Serial.write("\n");
 }
 
 void setup() {
@@ -127,8 +148,10 @@ void loop() {
   }
   uint32_t color;
   Serial.readBytes((uint8_t*) &color, sizeof(uint32_t));
+  debug(color, true);
   patternSingle(color);
   fadeTo();
+  debug(color, false);
   
   
 //  patternSingle(BLACK);
